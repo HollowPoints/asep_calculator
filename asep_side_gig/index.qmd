@@ -1,0 +1,164 @@
+---
+title: "Υπολογιστής Κατάταξης ΑΣΕΠ 1Γ/2025"
+format: html
+editor: visual
+---
+
+<style>
+  #results {
+    margin-top: 20px;
+    font-weight: bold;
+    padding-bottom: 180px; /* increased padding to clear disclaimer */
+  }
+
+  @media (max-width: 600px) {
+    #results {
+      padding-bottom: 220px; /* more space on smaller screens */
+    }
+  }
+
+  /* Dropdown styling: half width, wrap text */
+  #categorySelect {
+    width: 50%;
+    min-width: 150px;
+    padding: 4px;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+</style>
+
+Επιλέξτε την κατηγορία σας και εισάγετε τη συνολική βαθμολογία σας για να δείτε σε ποιο ποσοστό των υποψηφίων βρίσκεστε.
+
+<div>
+  <label for="categorySelect"><strong>Κατηγορία Υποψηφίων:</strong></label><br>
+  <select id="categorySelect"></select>
+</div>
+<br>
+
+<div>
+  <label>Συνολική Βαθμολογία: <input type="number" id="total_score" min="0" max="100" step="0.01"></label><br><br>
+  <button id="calcBtn">Υπολογισμός</button>
+</div>
+
+<div id="results"></div>
+
+<div id="disclaimer" style="
+  position: fixed; 
+  bottom: 0; 
+  left: 0; 
+  right: 0; 
+  background: #eee; 
+  color: #666; 
+  font-size: 0.64em; 
+  line-height: 1.2em; 
+  padding: 15px 10px; 
+  border-top: 1px solid #ccc; 
+  box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+  user-select: none;
+  max-height: 35vh;
+  overflow-y: auto;
+  z-index: 1000;
+">
+Αυτή η εφαρμογή αποτελεί ανεπίσημο εργαλείο, το οποίο δημιουργήθηκε ανεξάρτητα και δεν έχει καμία σχέση ή έγκριση από το ΑΣΕΠ ή οποιαδήποτε επίσημη αρχή. Οι παρεχόμενες ποσοστιαίες θέσεις βασίζονται σε δημόσια διαθέσιμα δεδομένα(<a href="https://info.asep.gr/node/76931" target="_blank" rel="noopener noreferrer">https://info.asep.gr/node/76931</a> )και προσεγγίζουν τα επίσημα αποτελέσματα, αλλά δεν εγγυώνται ακρίβεια, πρόσληψη, εισαγωγή ή οποιοδήποτε επίσημο αποτέλεσμα. Χρησιμοποιήστε αυτό το εργαλείο μόνο για ενημερωτικούς και εκπαιδευτικούς σκοπούς. Ο δημιουργός δεν φέρει καμία ευθύνη για οποιαδήποτε απόφαση, αποτέλεσμα ή συνέπεια που προκύπτει από τη χρήση αυτού του εργαλείου. Για επίσημα αποτελέσματα και αποφάσεις, παρακαλούμε απευθυνθείτε στις αρμόδιες αρχές του ΑΣΕΠ.
+</div>
+
+<script>
+let scoresData = [];
+let categoryMap = new Map();  // Map for code -> label
+
+// Load combined_map.json and populate dropdown
+fetch("combined_map.json")
+  .then(response => {
+    if (!response.ok) throw new Error("Δεν βρέθηκε το αρχείο κατηγοριών");
+    return response.json();
+  })
+  .then(data => {
+    // data is array of objects [{code, label}, ...]
+    categoryMap = new Map(data.map(item => [item.code, item.label]));
+
+    const select = document.getElementById("categorySelect");
+
+    // Default option for no filter
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "all";
+    defaultOption.textContent = "Σύνολο Υποψηφίων";
+    select.appendChild(defaultOption);
+
+    // Add all categories from map
+    for (const [code, label] of categoryMap.entries()) {
+      const option = document.createElement("option");
+      option.value = code;
+      option.textContent = label;
+      select.appendChild(option);
+    }
+
+    // Load main scores data
+    return fetch("asep.json");
+  })
+  .then(response => {
+    if (!response.ok) throw new Error("Δεν βρέθηκε το αρχείο δεδομένων");
+    return response.json();
+  })
+  .then(data => {
+    scoresData = data;
+  })
+  .catch(err => {
+    document.getElementById('results').innerText = "Σφάλμα φόρτωσης δεδομένων.";
+    console.error(err);
+  });
+
+// Calculate percentile rank function
+function percentileRank(arr, value) {
+  if (arr.length === 0) return 0;
+  let count = arr.filter(x => x < value).length;
+  return (count / arr.length) * 100;
+}
+
+// Color coding function
+function colorCode(p) {
+  if (p >= 66.67) return "green";
+  else if (p >= 33.34) return "orange";  
+  else return "red";
+}
+
+document.getElementById("calcBtn").addEventListener("click", () => {
+  const totalInput = document.getElementById("total_score").value.trim();
+  const category = document.getElementById("categorySelect").value;
+
+  if (totalInput === '') {
+    alert("Παρακαλώ εισάγετε τη συνολική βαθμολογία.");
+    return;
+  }
+
+  if (category !== "all" && !categoryMap.has(category)) {
+    alert("Παρακαλώ επιλέξτε μια κατηγορία.");
+    return;
+  }
+
+  const numVal = parseFloat(totalInput);
+  if (isNaN(numVal)) {
+    alert("Παρακαλώ εισάγετε έγκυρο αριθμό.");
+    return;
+  }
+
+  // Filter scoresData by category or all
+  const filtered = (category === "all") ? scoresData : scoresData.filter(d => d.category === category);
+
+  if(filtered.length === 0) {
+    document.getElementById("results").innerHTML = "Δεν υπάρχουν δεδομένα για την επιλεγμένη κατηγορία.";
+    return;
+  }
+
+  const totalArr = filtered.map(d => parseFloat(d.total_score));
+
+  const perc = percentileRank(totalArr, numVal);
+  const color = colorCode(perc);
+
+  const categoryText = (category === "all") ? "Σύνολο Υποψηφίων" : categoryMap.get(category);
+
+  const resultHTML = `Η συνολική βαθμολογία σου ξεπερνά το <span style="color:${color}">${perc.toFixed(1)}%</span> των υποψηφίων στην κατηγορία <strong>${categoryText}</strong>.`;
+
+  document.getElementById("results").innerHTML = resultHTML;
+});
+</script>
